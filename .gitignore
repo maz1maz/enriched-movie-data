@@ -1,0 +1,30 @@
+# Output files
+output/
+*-enriched.*
+*-missing.*
+*_cache.json
+
+# Test files
+test_*.csv
+test_*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
