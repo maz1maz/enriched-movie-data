@@ -69,6 +69,8 @@ OMDB_URL = "https://www.omdbapi.com/"
 IMDB_SUGGESTION_URL = "https://v3.sg.media-imdb.com/suggestion/{}/{}.json"
 TVMAZE_SEARCH_URL = "https://api.tvmaze.com/search/shows"
 TVMAZE_SHOW_URL = "https://api.tvmaze.com/shows/{}"
+TVMAZE_SEASONS_URL = "https://api.tvmaze.com/shows/{}/seasons"
+TVMAZE_EPISODES_URL = "https://api.tvmaze.com/shows/{}/episodes"
 TVMAZE_CAST_URL = "https://api.tvmaze.com/shows/{}/cast"
 TVMAZE_CREW_URL = "https://api.tvmaze.com/shows/{}/crew"
 
@@ -88,6 +90,7 @@ SERIES_COLUMNS = [
     "Title", "Shelf", "Row", "Director", "Cast", "Year",
     "Genre", "Rating", "Runtime", "Country", "Synopsis",
     "Poster URL", "Original Title", "Seasons Available",
+    "Total Episodes", "Episodes by Season",
     "Total Size", "Folder Paths"
 ]
 
@@ -103,6 +106,9 @@ TVMAZE_CORRECTIONS = {
     "the bridge": 1910,
     "dark": 13177,
 }
+
+# نسخه کش سریال: با تغییر ساختار اطلاعات فصل/قسمت، کش‌های قدیمی refresh می‌شوند
+SERIES_CACHE_SCHEMA = "series-v2-season-episodes-1"
 
 # اصلاحات دستی برای عناوین مشکل‌دار (OMDb جستجوی جایگزین)
 OMDB_TITLE_CORRECTIONS = {
@@ -336,12 +342,91 @@ def fetch_movie_details(title, cache, translate=True, verbose=True):
 # =============================================================================
 # TVMaze API (سریال)
 # =============================================================================
+def to_positive_int(value):
+    """تبدیل امن مقدار به عدد صحیح مثبت"""
+    try:
+        value = int(value)
+        return value if value > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_series_episode_summary(show_id):
+    """
+    گرفتن تعداد فصل‌ها و تعداد قسمت‌های هر فصل از TVMaze.
+
+    /episodes معمولاً دقیق‌ترین لیست قسمت‌های ثبت‌شده/پخش‌شده را می‌دهد.
+    اگر برای فصلی episode ثبت نشده باشد، به episodeOrder از /seasons fallback می‌کنیم.
+    فصل ۰ یا Specials در شمارش فصل‌های اصلی لحاظ نمی‌شود.
+    """
+    season_numbers = set()
+    episode_counts = defaultdict(int)
+    season_episode_orders = {}
+
+    # لیست کامل قسمت‌های معمولی سریال (بدون Specials)
+    res = http_get_with_retry(TVMAZE_EPISODES_URL.format(show_id))
+    if res and res.status_code == 200:
+        try:
+            for episode in res.json():
+                season_number = to_positive_int(episode.get("season"))
+                if season_number:
+                    season_numbers.add(season_number)
+                    episode_counts[season_number] += 1
+        except Exception:
+            pass
+
+    # لیست فصل‌ها؛ برای فصل‌هایی که هنوز episodeهایشان کامل ثبت نشده، episodeOrder کمک می‌کند
+    res = http_get_with_retry(TVMAZE_SEASONS_URL.format(show_id))
+    if res and res.status_code == 200:
+        try:
+            for season in res.json():
+                season_number = to_positive_int(season.get("number"))
+                if not season_number:
+                    continue
+                season_numbers.add(season_number)
+
+                episode_order = to_positive_int(season.get("episodeOrder"))
+                if episode_order:
+                    season_episode_orders[season_number] = episode_order
+        except Exception:
+            pass
+
+    if not season_numbers:
+        return {
+            "Seasons Available": "",
+            "Total Episodes": "",
+            "Episodes by Season": "",
+        }
+
+    season_counts = {}
+    for season_number in sorted(season_numbers):
+        # اولویت با تعداد episodeهای واقعی ثبت‌شده است؛ اگر نبود از episodeOrder استفاده می‌کنیم
+        count = episode_counts.get(season_number, 0) or season_episode_orders.get(season_number, 0)
+        season_counts[season_number] = count
+
+    total_episodes = sum(season_counts.values())
+    episodes_by_season = "; ".join(
+        f"S{season_number:02d}: {count if count else '?'}"
+        for season_number, count in season_counts.items()
+    )
+
+    return {
+        "Seasons Available": len(season_counts),
+        "Total Episodes": total_episodes if total_episodes else "",
+        "Episodes by Season": episodes_by_season,
+    }
+
+
 def fetch_series_details(title, cache, translate=True, verbose=True):
     """دریافت اطلاعات کامل سریال از TVMaze"""
     # بررسی کش
     cached = cache.get(f"series:{title}")
     if cached is not None:
-        return cached if cached != {} else None
+        if cached == {}:
+            return None
+        # کش‌های قدیمی ستون‌های فصل/قسمت را ندارند؛ یک بار refresh می‌شوند
+        if cached.get("_schema_version") == SERIES_CACHE_SCHEMA:
+            return cached
 
     search_title = title
     if translate and not is_pure_ascii(title):
@@ -418,8 +503,6 @@ def fetch_series_details(title, cache, translate=True, verbose=True):
             image = show.get("image", {})
             details["Poster URL"] = image.get("original", "") or image.get("medium", "") or ""
 
-            # تعداد فصل‌ها
-            details["_seasons"] = show.get("seasons", [])
             details["_show_id"] = show_id
         except Exception:
             pass
@@ -437,9 +520,11 @@ def fetch_series_details(title, cache, translate=True, verbose=True):
     # کارگردان از crew — TVMaze crew API محدود است
     details["Director"] = ""
 
-    # تعداد فصل‌ها
-    seasons = details.pop("_seasons", [])
-    details["Seasons Available"] = len(seasons) if seasons else ""
+    # تعداد فصل‌ها و تعداد قسمت‌های هر فصل
+    details.update(fetch_series_episode_summary(show_id))
+
+    if details:
+        details["_schema_version"] = SERIES_CACHE_SCHEMA
 
     cache.set(f"series:{title}", details if details else {})
     return details if details else None
@@ -623,6 +708,18 @@ def process_file(input_path, file_type="auto", output_dir=None,
     fail_count = 0
     skip_count = 0
 
+    def cell_has_value(value):
+        """آیا سلول واقعاً مقدار دارد؟"""
+        if value is None:
+            return False
+        try:
+            if pd.isna(value):
+                return False
+        except TypeError:
+            pass
+        value = str(value).strip()
+        return bool(value) and value.lower() != "nan"
+
     if HAS_PANDAS and isinstance(df, pd.DataFrame):
         for idx, row in df.iterrows():
             title = row.get(title_col)
@@ -633,10 +730,13 @@ def process_file(input_path, file_type="auto", output_dir=None,
             progress = f"[{idx + 1}/{total}]"
 
             # چک پردازش قبلی
-            dir_val = row.get("Director", "")
-            genre_val = row.get("Genre", "")
-            if (dir_val and not pd.isna(dir_val) and str(dir_val).strip()
-                    and genre_val and not pd.isna(genre_val) and str(genre_val).strip()):
+            # برای سریال‌ها علاوه بر ژانر، ستون‌های فصل/قسمت هم باید پر باشند تا skip شود.
+            skip_required_cols = (
+                ["Genre", "Seasons Available", "Episodes by Season"]
+                if file_type == "series"
+                else ["Director", "Genre"]
+            )
+            if all(cell_has_value(row.get(col, "")) for col in skip_required_cols):
                 skip_count += 1
                 if verbose:
                     print(f"  {progress} ⏭️  '{title}' — قبلاً پردازش شده")
@@ -644,6 +744,17 @@ def process_file(input_path, file_type="auto", output_dir=None,
 
             if verbose:
                 print(f"  {progress} 🔍 '{title}'")
+
+            cache_key = f"{'movie' if file_type == 'movie' else 'series'}:{title}".strip().lower()
+            cached_entry = cache.data.get(cache_key)
+            fresh_cache_entry = cached_entry is not None
+            if (
+                file_type == "series"
+                and isinstance(cached_entry, dict)
+                and cached_entry != {}
+                and cached_entry.get("_schema_version") != SERIES_CACHE_SCHEMA
+            ):
+                fresh_cache_entry = False
 
             details = fetch_fn(title)
 
@@ -667,6 +778,8 @@ def process_file(input_path, file_type="auto", output_dir=None,
 
                 if file_type == "series":
                     field_map["Seasons Available"] = details.get("Seasons Available", "")
+                    field_map["Total Episodes"] = details.get("Total Episodes", "")
+                    field_map["Episodes by Season"] = details.get("Episodes by Season", "")
 
                 for col, val in field_map.items():
                     if col in df.columns:
@@ -687,8 +800,8 @@ def process_file(input_path, file_type="auto", output_dir=None,
             if (idx + 1) % 50 == 0:
                 cache.save()
 
-            # تأخیر
-            if not cache.get(f"{'movie' if file_type == 'movie' else 'series'}:{title}"):
+            # تأخیر فقط برای درخواست‌های جدید/refresh شده اعمال شود، نه کش‌هیت‌ها
+            if not fresh_cache_entry:
                 time.sleep(delay)
 
         # ذخیره نهایی کش
@@ -710,8 +823,14 @@ def process_file(input_path, file_type="auto", output_dir=None,
         df_out.to_excel(enriched_path, index=False)
 
         # فایل missing
-        missing = df[df["Director"].isna() | (df["Director"] == "") |
-                      df["Genre"].isna() | (df["Genre"] == "")]
+        if file_type == "series":
+            missing = df[
+                df["Genre"].isna() | (df["Genre"] == "") |
+                df["Episodes by Season"].isna() | (df["Episodes by Season"] == "")
+            ]
+        else:
+            missing = df[df["Director"].isna() | (df["Director"] == "") |
+                         df["Genre"].isna() | (df["Genre"] == "")]
         if len(missing) > 0:
             missing.to_csv(missing_path, index=False, encoding="utf-8-sig")
             print(f"  ⚠️  {len(missing)} عنوان ناقص → {missing_path.name}")
