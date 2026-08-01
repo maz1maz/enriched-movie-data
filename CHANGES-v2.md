@@ -1,8 +1,8 @@
 # 🚀 خلاصه بهبودهای نسخه v2
 
 ## 📊 آمار کلی
-- **تعداد خطوط**: ۷۹۵ خط (در مقابل ~۱۵۰ خط کد جدید و ~۳۲۰۰ خط کد ریپازیتوری)
-- **تعداد توابع**: ۲۱ تابع
+- **تعداد خطوط**: ۹۱۴ خط (در مقابل ~۱۵۰ خط کد جدید و ~۳۲۰۰ خط کد ریپازیتوری)
+- **تعداد توابع**: ۲۳ تابع
 - **ساختار**: تک‌فایل، ماژولار و قابل نگهداری
 
 ---
@@ -24,7 +24,8 @@
 5. ✅ مدیریت انکدینگ (windows-1252, UTF-8)
 6. ✅ خروجی Missing برای اصلاح دستی
 7. ✅ ستون‌های کامل (Shelf, Row, Total Size, Folder Paths)
-8. ✅ اصلاح عناوین مشکل‌دار (Money Heist → La Casa de Papel)
+8. ✅ تعداد فصل‌ها، مجموع قسمت‌ها و تعداد قسمت‌های هر فصل برای سریال‌ها
+9. ✅ اصلاح عناوین مشکل‌دار (Money Heist → La Casa de Papel)
 
 ### ویژگی‌های کاملاً جدید v2:
 1. ✅ **HTTP Retry با Exponential Backoff** — مدیریت خودکار خطاهای شبکه
@@ -54,13 +55,14 @@
 6. `clean_runtime()` — استخراج عدد Runtime
 7. `get_imdb_id_from_suggestion()` — IMDb Suggestion API
 8. `fetch_movie_details()` — دریافت اطلاعات فیلم (OMDb)
-9. `fetch_series_details()` — دریافت اطلاعات سریال (TVMaze)
-10. `detect_file_type()` — تشخیص خودکار نوع فایل
-11. `read_input_file()` — خواندن CSV/Excel
-12. `find_title_column()` — پیدا کردن ستون عنوان
-13. `normalize_columns()` — یکسان‌سازی نام ستون‌ها
-14. `process_file()` — پردازش اصلی
-15. `main()` — CLI interface
+9. `fetch_series_episode_summary()` — تعداد فصل‌ها و قسمت‌های هر فصل سریال
+10. `fetch_series_details()` — دریافت اطلاعات سریال (TVMaze)
+11. `detect_file_type()` — تشخیص خودکار نوع فایل
+12. `read_input_file()` — خواندن CSV/Excel
+13. `find_title_column()` — پیدا کردن ستون عنوان
+14. `normalize_columns()` — یکسان‌سازی نام ستون‌ها
+15. `process_file()` — پردازش اصلی
+16. `main()` — CLI interface
 
 ---
 
