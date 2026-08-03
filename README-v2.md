@@ -29,6 +29,8 @@
 - ✅ **حالت Quiet** — `--quiet` برای کاهش لاگ
 - ✅ **Delay قابل تنظیم** — `--delay 0.5` برای کنترل سرعت درخواست‌ها
 - ✅ **غیرفعال کردن ترجمه** — `--no-translate` اگه نمی‌خوای ترجمه کنه
+- ✅ **خروجی بر اساس قالب Excel** — اگر `film-archive-template.xlsx` کنار برنامه یا ورودی باشد، فایل نهایی با همان ستون‌ها و استایل پر می‌شود
+- ✅ **داستان واقعی فیلم در ستون Synopsis** — برنامه از فیلد Plot/Synopsis API استفاده می‌کند، نه لینک جستجوی داستان
 
 ## 📦 نصب
 
@@ -79,11 +81,30 @@ python cinefilm-enricher-v2.py --input movies.csv --no-translate
 python cinefilm-enricher-v2.py --input movies.csv --quiet
 ```
 
+### خروجی با قالب `film-archive-template.xlsx`
+اگر فایل `film-archive-template.xlsx` کنار برنامه یا کنار فایل ورودی باشد، برنامه خروجی Excel را خودکار بر اساس همان قالب می‌سازد:
+
+```bash
+python cinefilm-enricher-v2.py --input movies.csv
+```
+
+یا مسیر قالب را دستی بده:
+
+```bash
+python cinefilm-enricher-v2.py --input movies.csv --template film-archive-template.xlsx
+```
+
+برای غیرفعال کردن قالب:
+
+```bash
+python cinefilm-enricher-v2.py --input movies.csv --no-template
+```
+
 ## 📊 خروجی‌ها
 
 ### فایل غنی‌شده
-- `output/{filename}-enriched.xlsx` — فایل اصلی با اطلاعات کامل
-- `output/{filename}-enriched.csv` — نسخه CSV
+- `output/{filename}-enriched.xlsx` — فایل اصلی با اطلاعات کامل؛ اگر `film-archive-template.xlsx` موجود باشد، دقیقاً با ستون‌های قالب (`Title, Shelf, Row, Director, Cast, Year, Genre, Rating, Runtime, Country, Synopsis, Poster URL, Original Title`) ساخته می‌شود
+- `output/{filename}-enriched.csv` — نسخه CSV؛ در حالت قالب‌دار، CSV هم با همان ستون‌های قالب خروجی می‌گیرد
 
 ### فایل Missing
 - `output/{filename}-missing.csv` — عناوینی که اطلاعاتشون ناقص مونده
@@ -147,6 +168,8 @@ python cinefilm-enricher-v2.py --input movies.csv --quiet
 --input, -i        فایل ورودی (CSV یا Excel) [اجباری]
 --type, -t         نوع فایل: auto, movie, series [پیش‌فرض: auto]
 --output, -o       پوشه خروجی [پیش‌فرض: input_dir/output]
+--template         مسیر قالب Excel خروجی [پیش‌فرض: film-archive-template.xlsx اگر موجود باشد]
+--no-template      غیرفعال کردن خروجی قالب‌دار
 --delay, -d        تأخیر بین درخواست‌ها (ثانیه) [پیش‌فرض: 0.5]
 --no-translate     غیرفعال کردن ترجمه خودکار
 --quiet, -q        حالت بی‌صدا (فقط خطاها)
